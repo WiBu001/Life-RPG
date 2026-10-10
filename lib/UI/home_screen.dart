@@ -1,8 +1,11 @@
+
 import 'package:flutter/material.dart';
-import '../models/quest.dart';
-import '../data/quest_data.dart';
+
 import '../models/character.dart';
+import '../models/daily_quest.dart';
 import '../services/storage_service.dart';
+import '../services/quest_scheduler.dart';
+import '../services/quest_completion_service.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -18,146 +21,118 @@ class _HomeScreenState extends State<HomeScreen> {
     role: 'DPS',
   );
 
+  int currency = 0;
+  List<DailyQuest> quests = [];
+  bool isLoading = true;
+
   @override
   void initState() {
     super.initState();
-
-    loadCharacter();
+    initializeHome();
   }
 
-  int currency = 0;
-  final List<Quest> quests = dailyQuests;
-
-  Future<void> completeQuest(Quest quest) async {
-    if (quest.isCompleted) {
-      return;
-    }
-
-    setState(() {
-      quest.isCompleted = true;
-
-      character.exp += quest.expReward;
-      currency += quest.currencyReward;
-
-      if (character.exp >= 100) {
-        character.exp -= 100;
-        character.level++;
-
-        character.hp += 50;
-        character.atk += 5;
-        character.def += 3;
-      }
-    });
-    await StorageService.saveCharacter(character);
-  }
-
-  void showAddQuestDialog() {
-    final titleController = TextEditingController();
-    final expController = TextEditingController(text: '100');
-    final currencyController = TextEditingController(text: '10');
-
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('Create Quest'),
-
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: titleController,
-                decoration: const InputDecoration(
-                  labelText: 'Quest Title',
-                ),
-              ),
-
-              const SizedBox(height: 12),
-
-              TextField(
-                controller: expController,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                  labelText: 'EXP Reward',
-                ),
-              ),
-
-              const SizedBox(height: 12),
-
-              TextField(
-                controller: currencyController,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                  labelText: 'Currency Reward',
-                ),
-              ),
-            ],
-          ),
-
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.pop(context);
-              },
-              child: const Text('CANCEL'),
-            ),
-
-            ElevatedButton(
-              onPressed: () {
-                final title = titleController.text.trim();
-                final expReward = int.tryParse(expController.text) ?? 0;
-                final currencyReward =
-                    int.tryParse(currencyController.text) ?? 0;
-
-                if (title.isEmpty) {
-                  return;
-                }
-
-                setState(() {
-                  quests.add(
-                    Quest(
-                      title: title,
-                      expReward: expReward,
-                      currencyReward: currencyReward,
-                    ),
-                  );
-                });
-
-                Navigator.pop(context);
-              },
-              child: const Text('CREATE'),
-            ),
-          ],
-        );
-      },
-    );
+  Future<void> initializeHome() async {
+    await loadCharacter();
+    await loadCurrency();
+    await loadQuests();
   }
 
   Future<void> loadCharacter() async {
     final savedCharacter = await StorageService.loadCharacter();
 
-    if (savedCharacter != null) {
+    if (!mounted || savedCharacter == null) return;
+
+    setState(() {
+      character = savedCharacter;
+    });
+  }
+
+  Future<void> loadCurrency() async {
+    final savedCurrency = await StorageService.loadCurrency();
+
+    if (!mounted) return;
+
+    setState(() {
+      currency = savedCurrency;
+    });
+  }
+
+  Future<void> loadQuests() async {
+    try {
+      final weeklyQuests =
+          await StorageService.loadWeeklyQuests() ?? [];
+
+      final allDailyQuests =
+          await StorageService.loadDailyQuests() ?? [];
+
+      final todaysQuests = QuestScheduler.generateDailyQuests(
+        weeklyQuests: weeklyQuests,
+        allDailyQuests: allDailyQuests,
+        today: DateTime.now(),
+      );
+
+      // Save today's selection without replacing quest history.
+      await StorageService.addDailyQuests(todaysQuests);
+
+      if (!mounted) return;
+
       setState(() {
-        character = savedCharacter;
+        quests = todaysQuests;
+        isLoading = false;
       });
+    } catch (error) {
+      if (!mounted) return;
+
+      setState(() {
+        isLoading = false;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to load quests: $error'),
+        ),
+      );
     }
   }
+
+Future<void> completeQuest(DailyQuest quest) async {
+  if (quest.isCompleted) return;
+
+  // Disable the button immediately to prevent double taps.
+  setState(() {
+    quest.isCompleted = true;
+  });
+
+  final success = await QuestCompletionService.completeTask(
+    weeklyQuestId: quest.weeklyQuestId,
+    taskId: quest.taskId,
+    expReward: quest.expReward,
+    currencyReward: quest.currencyReward,
+  );
+
+  if (!mounted) return;
+
+  if (!success) {
+    // Restore the UI if the task was already completed elsewhere.
+    setState(() {
+      quest.isCompleted = true;
+    });
+  }
+
+  await loadCharacter();
+  await loadCurrency();
+  await loadQuests();
+}
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Life RPG'),
-      ),
-
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-
-            // Currency
-            Align(
-              alignment: Alignment.centerRight,
+        actions: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Center(
               child: Text(
                 '💎 $currency',
                 style: const TextStyle(
@@ -166,10 +141,13 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
             ),
-
-            const SizedBox(height: 20),
-
-            // Character
+          ),
+        ],
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
             Card(
               child: Padding(
                 padding: const EdgeInsets.all(20),
@@ -182,22 +160,13 @@ class _HomeScreenState extends State<HomeScreen> {
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-
-                    Text(
-                      '${character.rarity} ${character.role}',
-                    ),
-
+                    Text('${character.rarity} ${character.role}'),
                     const SizedBox(height: 10),
-
                     Text(
                       'Lv. ${character.level}',
-                      style: const TextStyle(
-                        fontSize: 20,
-                      ),
+                      style: const TextStyle(fontSize: 20),
                     ),
-
                     const SizedBox(height: 15),
-
                     Text('EXP ${character.exp} / 100'),
                     Text('❤️ HP   ${character.hp}'),
                     Text('⚔️ ATK   ${character.atk}'),
@@ -206,51 +175,52 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
             ),
-
             const SizedBox(height: 20),
-
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text(
-                  'DAILY QUESTS',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                  ),
+            const Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                'DAILY QUESTS',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
                 ),
-
-                ElevatedButton.icon(
-                  onPressed: showAddQuestDialog,
-                  icon: const Icon(Icons.add),
-                  label: const Text('ADD'),
-                ),
-              ],
+              ),
             ),
-
             const SizedBox(height: 10),
-
-            Column(
-              children: quests.map((quest) {
-                return Card(
-                  child: ListTile(
-                    title: Text(quest.title),
-                    subtitle: Text(
-                      '+${quest.expReward} EXP    +${quest.currencyReward} 💎',
-                    ),
-                    trailing: ElevatedButton(
-                      onPressed: quest.isCompleted
-                          ? null
-                          : () => completeQuest(quest),
+            Expanded(
+              child: quests.isEmpty
+                  ? const Center(
                       child: Text(
-                        quest.isCompleted
-                            ? 'COMPLETED'
-                            : 'COMPLETE',
+                        'No daily quests yet.\nCreate a Weekly Quest to get started.',
+                        textAlign: TextAlign.center,
                       ),
+                    )
+                  : ListView.builder(
+                      itemCount: quests.length,
+                      itemBuilder: (context, index) {
+                        final quest = quests[index];
+
+                        return Card(
+                          child: ListTile(
+                            title: Text(quest.title),
+                            subtitle: Text(
+                              '+${quest.expReward} EXP'
+                              '    +${quest.currencyReward} 💎',
+                            ),
+                            trailing: ElevatedButton(
+                              onPressed: quest.isCompleted
+                                  ? null
+                                  : () => completeQuest(quest),
+                              child: Text(
+                                quest.isCompleted
+                                    ? 'COMPLETED'
+                                    : 'COMPLETE',
+                              ),
+                            ),
+                          ),
+                        );
+                      },
                     ),
-                  ),
-                );
-              }).toList(),
             ),
           ],
         ),
