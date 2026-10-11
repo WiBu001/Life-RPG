@@ -21,6 +21,25 @@ class Character {
     this.def = 30,
   });
 
+  // EXP required to reach the next level.
+  int get expToNextLevel => 100;
+
+  // Add EXP and process level-ups.
+  void addExp(int amount) {
+    if (amount <= 0) return;
+
+    exp += amount;
+
+    while (exp >= expToNextLevel) {
+      exp -= expToNextLevel;
+      level++;
+
+      hp += 50;
+      atk += 5;
+      def += 3;
+    }
+  }
+
   Map<String, dynamic> toJson() {
     return {
       'name': name,
@@ -39,11 +58,11 @@ class Character {
       name: json['name'],
       rarity: json['rarity'],
       role: json['role'],
-      level: json['level'],
-      exp: json['exp'],
-      hp: json['hp'],
-      atk: json['atk'],
-      def: json['def'],
+      level: json['level'] ?? 1,
+      exp: json['exp'] ?? 0,
+      hp: json['hp'] ?? 500,
+      atk: json['atk'] ?? 50,
+      def: json['def'] ?? 30,
     );
   }
 }

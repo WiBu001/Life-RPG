@@ -62,9 +62,16 @@ class _CalendarScreenState extends State<CalendarScreen> {
             );
 
       if (event.parentEventId != null) {
-        if (event.originalOccurrenceKey == _dateKey(selectedDay)) {
+        final eventDay = DateTime(
+          event.startTime.year,
+          event.startTime.month,
+          event.startTime.day,
+        );
+
+        if (eventDay == selectedDay) {
           result.add(event);
         }
+
         continue;
       }
 
@@ -233,7 +240,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                     ),
                     const SizedBox(height: 12),
                     DropdownButtonFormField<String>(
-                      value: category,
+                      initialValue: category,
                       decoration: const InputDecoration(
                         labelText: 'Category',
                       ),
@@ -253,7 +260,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                     ),      
                     const SizedBox(height: 12),
                     DropdownButtonFormField<String>(
-                      value: repeatType,
+                      initialValue: repeatType,
                       decoration: const InputDecoration(
                         labelText: 'Repeat',
                       ),
@@ -464,49 +471,183 @@ class _CalendarScreenState extends State<CalendarScreen> {
     notesController.dispose();
   }
   
-
   Future<void> deleteEventOccurrence(CalendarEvent event) async {
-    final isOccurrence = event.parentEventId != null;
+    final updatedEvents = [...events];
 
-    if (isOccurrence) {
-      final seriesIndex = events.indexWhere(
+    if (event.parentEventId != null) {
+      // Delete an individually edited occurrence.
+      updatedEvents.removeWhere(
+        (item) => item.id == event.id,
+      );
+
+      final seriesIndex = updatedEvents.indexWhere(
         (item) => item.id == event.parentEventId,
       );
 
-      if (seriesIndex == -1) return;
+      if (seriesIndex != -1 &&
+          event.originalOccurrenceKey != null) {
+        final series = updatedEvents[seriesIndex];
+        final occurrenceKey = event.originalOccurrenceKey!;
 
-      final series = events[seriesIndex];
-      final occurrenceKey = event.originalOccurrenceKey!;
-
-      final updatedSeries = CalendarEvent(
-        id: series.id,
-        title: series.title,
-        category: series.category,
-        startTime: series.startTime,
-        endTime: series.endTime,
-        location: series.location,
-        notes: series.notes,
-        repeatType: series.repeatType,
-        repeatUntil: series.repeatUntil,
-        excludedOccurrenceKeys: [
+        final exclusions = [
           ...series.excludedOccurrenceKeys,
-          occurrenceKey,
-        ],
+        ];
+
+        if (!exclusions.contains(occurrenceKey)) {
+          exclusions.add(occurrenceKey);
+        }
+
+        updatedEvents[seriesIndex] = CalendarEvent(
+          id: series.id,
+          title: series.title,
+          category: series.category,
+          startTime: series.startTime,
+          endTime: series.endTime,
+          location: series.location,
+          notes: series.notes,
+          repeatType: series.repeatType,
+          repeatUntil: series.repeatUntil,
+          excludedOccurrenceKeys: exclusions,
+        );
+      }
+    } else if (event.repeatType != 'none') {
+      // Delete only the original occurrence, not the series.
+      final index = updatedEvents.indexWhere(
+        (item) => item.id == event.id,
       );
 
-      setState(() {
-        events[seriesIndex] = updatedSeries;
-      });
+      if (index != -1) {
+        final series = updatedEvents[index];
+        final occurrenceKey = _dateKey(series.startTime);
+
+        final exclusions = [
+          ...series.excludedOccurrenceKeys,
+        ];
+
+        if (!exclusions.contains(occurrenceKey)) {
+          exclusions.add(occurrenceKey);
+        }
+
+        updatedEvents[index] = CalendarEvent(
+          id: series.id,
+          title: series.title,
+          category: series.category,
+          startTime: series.startTime,
+          endTime: series.endTime,
+          location: series.location,
+          notes: series.notes,
+          repeatType: series.repeatType,
+          repeatUntil: series.repeatUntil,
+          excludedOccurrenceKeys: exclusions,
+        );
+      }
     } else {
-      setState(() {
-        events.removeWhere((item) => item.id == event.id);
-      });
+      // Delete a normal one-time event.
+      updatedEvents.removeWhere(
+        (item) => item.id == event.id,
+      );
     }
 
-    await StorageService.saveCalendarEvents(events);
-  }
+    await StorageService.saveCalendarEvents(updatedEvents);
 
+    if (!mounted) return;
+
+    setState(() {
+      events = updatedEvents;
+    });
+  }
+  
   Future<void> deleteEvent(CalendarEvent event) async {
+    final seriesId = event.parentEventId ?? event.id;
+
+    final seriesIndex = events.indexWhere(
+      (item) => item.id == seriesId,
+    );
+
+    final isRecurringSeries = seriesIndex != -1 &&
+        events[seriesIndex].repeatType != 'none';
+
+    if (isRecurringSeries) {
+      final choice = await showDialog<String>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Delete recurring event'),
+          content: const Text(
+            'Which events do you want to delete?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () =>
+                  Navigator.pop(dialogContext, 'cancel'),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () =>
+                  Navigator.pop(dialogContext, 'single'),
+              child: const Text('This event'),
+            ),
+            TextButton(
+              onPressed: () =>
+                  Navigator.pop(dialogContext, 'following'),
+              child: const Text('This and following events'),
+            ),
+            TextButton(
+              onPressed: () =>
+                  Navigator.pop(dialogContext, 'all'),
+              style: TextButton.styleFrom(
+                foregroundColor: Colors.red,
+              ),
+              child: const Text('All events'),
+            ),
+          ],
+        ),
+      );
+
+      if (choice == null ||
+          choice == 'cancel' ||
+          !mounted) {
+        return;
+      }
+
+      switch (choice) {
+        case 'single':
+          await deleteEventOccurrence(event);
+          break;
+
+        case 'following':
+          await deleteThisAndFollowing(event);
+          break;
+
+        case 'all':
+          final updatedEvents = events.where((item) {
+            return item.id != seriesId &&
+                item.parentEventId != seriesId;
+          }).toList();
+
+          await StorageService.saveCalendarEvents(
+            updatedEvents,
+          );
+
+          if (!mounted) return;
+
+          setState(() {
+            events = updatedEvents;
+          });
+          break;
+      }
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Event deleted.'),
+        ),
+      );
+
+      return;
+    }
+
+    // Normal events and orphaned edited occurrences.
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -514,17 +655,20 @@ class _CalendarScreenState extends State<CalendarScreen> {
         content: Text(
           event.parentEventId != null
               ? 'Delete only this occurrence?'
-              : event.repeatType != 'none'
-                  ? 'Delete the entire recurring series?'
-                  : 'Delete this event?',
+              : 'Delete this event?',
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
+            onPressed: () =>
+                Navigator.pop(dialogContext, false),
             child: const Text('Cancel'),
           ),
           TextButton(
-            onPressed: () => Navigator.pop(dialogContext, true),
+            onPressed: () =>
+                Navigator.pop(dialogContext, true),
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.red,
+            ),
             child: const Text('Delete'),
           ),
         ],
@@ -535,10 +679,432 @@ class _CalendarScreenState extends State<CalendarScreen> {
 
     await deleteEventOccurrence(event);
 
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Event deleted.')),
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Event deleted.'),
+      ),
+    );
+  }
+
+  Future<void> deleteThisAndFollowing(
+    CalendarEvent event,
+  ) async {
+    final seriesId = event.parentEventId ?? event.id;
+
+    final seriesIndex = events.indexWhere(
+      (item) => item.id == seriesId,
+    );
+
+    if (seriesIndex == -1) return;
+
+    final series = events[seriesIndex];
+
+    if (series.repeatType == 'none') return;
+
+    // Use the original recurrence date when an occurrence
+    // has been moved or edited.
+    final occurrenceKey = event.originalOccurrenceKey ??
+        _dateKey(event.startTime);
+
+    final cutoff = DateTime.parse(occurrenceKey);
+
+    final seriesStart = DateTime(
+      series.startTime.year,
+      series.startTime.month,
+      series.startTime.day,
+    );
+
+    final deleteEntireSeries =
+        !cutoff.isAfter(seriesStart);
+
+    final updatedEvents = <CalendarEvent>[];
+
+    for (final item in events) {
+      // Handle the recurring series itself.
+      if (item.id == seriesId) {
+        if (deleteEntireSeries) {
+          continue;
+        }
+
+        final lastOccurrence = cutoff.subtract(
+          const Duration(days: 1),
+        );
+
+        // Do not extend an existing recurrence end date.
+        final existingEnd = item.repeatUntil;
+
+        final newRepeatUntil = existingEnd != null &&
+                DateTime(
+                  existingEnd.year,
+                  existingEnd.month,
+                  existingEnd.day,
+                ).isBefore(lastOccurrence)
+            ? existingEnd
+            : lastOccurrence;
+
+        updatedEvents.add(
+          CalendarEvent(
+            id: item.id,
+            title: item.title,
+            category: item.category,
+            startTime: item.startTime,
+            endTime: item.endTime,
+            location: item.location,
+            notes: item.notes,
+            repeatType: item.repeatType,
+            repeatUntil: newRepeatUntil,
+            excludedOccurrenceKeys:
+                item.excludedOccurrenceKeys
+                    .where(
+                      (key) => key.compareTo(
+                        occurrenceKey,
+                      ) < 0,
+                    )
+                    .toList(),
+          ),
+        );
+
+        continue;
+      }
+
+      // Handle separately stored edited occurrences.
+      if (item.parentEventId == seriesId) {
+        final originalKey = item.originalOccurrenceKey ??
+            _dateKey(item.startTime);
+
+        if (originalKey.compareTo(occurrenceKey) >= 0) {
+          // Delete this edited occurrence and all following
+          // edited occurrences in the series.
+          continue;
+        }
+      }
+
+      // Preserve unrelated events and earlier exceptions.
+      updatedEvents.add(item);
+    }
+
+    await StorageService.saveCalendarEvents(updatedEvents);
+
+    if (!mounted) return;
+
+    setState(() {
+      events = updatedEvents;
+    });
+  }
+
+  Future<void> editEvent(CalendarEvent event) async {
+    final titleController = TextEditingController(text: event.title);
+    final locationController =
+        TextEditingController(text: event.location);
+    final notesController = TextEditingController(text: event.notes);
+
+    String category = event.category;
+    DateTime startTime = event.startTime;
+    DateTime endTime = event.endTime;
+
+    final categories = [
+      'University',
+      'Social',
+      'Personal',
+      'Work',
+      'Custom',
+    ];
+
+    Future<DateTime?> pickDateTime(DateTime initial) async {
+      final date = await showDatePicker(
+        context: context,
+        initialDate: initial,
+        firstDate: DateTime(2020),
+        lastDate: DateTime(2100),
       );
+
+      if (date == null || !mounted) return null;
+
+      final time = await showTimePicker(
+        context: context,
+        initialTime: TimeOfDay.fromDateTime(initial),
+      );
+
+      if (time == null) return null;
+
+      return DateTime(
+        date.year,
+        date.month,
+        date.day,
+        time.hour,
+        time.minute,
+      );
+    }
+
+    try {
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) {
+          return StatefulBuilder(
+            builder: (context, setDialogState) {
+              return AlertDialog(
+                title: const Text('Edit Event'),
+                content: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      TextField(
+                        controller: titleController,
+                        decoration: const InputDecoration(
+                          labelText: 'Event title *',
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<String>(
+                        initialValue: categories.contains(category)
+                            ? category
+                            : 'Custom',
+                        decoration: const InputDecoration(
+                          labelText: 'Category',
+                        ),
+                        items: categories.map((item) {
+                          return DropdownMenuItem(
+                            value: item,
+                            child: Text(item),
+                          );
+                        }).toList(),
+                        onChanged: (value) {
+                          if (value != null) {
+                            setDialogState(() {
+                              category = value;
+                            });
+                          }
+                        },
+                      ),
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('Start'),
+                        subtitle: Text(
+                          '${formatDate(startTime)} '
+                          '${formatTime(startTime)}',
+                        ),
+                        trailing: const Icon(Icons.edit_calendar),
+                        onTap: () async {
+                          final picked =
+                              await pickDateTime(startTime);
+                          if (picked != null) {
+                            setDialogState(() {
+                              startTime = picked;
+                              if (!endTime.isAfter(startTime)) {
+                                endTime = startTime.add(
+                                  const Duration(hours: 1),
+                                );
+                              }
+                            });
+                          }
+                        },
+                      ),
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('End'),
+                        subtitle: Text(
+                          '${formatDate(endTime)} '
+                          '${formatTime(endTime)}',
+                        ),
+                        trailing: const Icon(Icons.edit_calendar),
+                        onTap: () async {
+                          final picked =
+                              await pickDateTime(endTime);
+                          if (picked != null) {
+                            setDialogState(() {
+                              endTime = picked;
+                            });
+                          }
+                        },
+                      ),
+                      TextField(
+                        controller: locationController,
+                        decoration: const InputDecoration(
+                          labelText: 'Location',
+                        ),
+                      ),
+                      TextField(
+                        controller: notesController,
+                        decoration: const InputDecoration(
+                          labelText: 'Notes',
+                        ),
+                        maxLines: 2,
+                      ),
+                    ],
+                  ),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () =>
+                        Navigator.pop(dialogContext),
+                    child: const Text('Cancel'),
+                  ),
+                  ElevatedButton(
+                    onPressed: () async {
+                      final title = titleController.text.trim();
+
+                      if (title.isEmpty) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              'Please enter an event title.',
+                            ),
+                          ),
+                        );
+                        return;
+                      }
+
+                      if (!endTime.isAfter(startTime)) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              'End time must be after start time.',
+                            ),
+                          ),
+                        );
+                        return;
+                      }
+
+                      final updatedEvents = [...events];
+
+                      // Find the original event or recurring series.
+                      final parentId = event.parentEventId;
+                      final sourceIndex = updatedEvents.indexWhere(
+                        (item) => item.id == parentId,
+                      );
+
+                      final existingExceptionIndex =
+                          updatedEvents.indexWhere(
+                        (item) => item.id == event.id,
+                      );
+
+                      final updatedEvent = CalendarEvent(
+                        id: event.id,
+                        title: title,
+                        category: category,
+                        startTime: startTime,
+                        endTime: endTime,
+                        location: locationController.text.trim(),
+                        notes: notesController.text.trim(),
+                        repeatType: event.repeatType,
+                        repeatUntil: event.repeatUntil,
+                        excludedOccurrenceKeys:
+                            event.excludedOccurrenceKeys,
+                        parentEventId: event.parentEventId,
+                        originalOccurrenceKey:
+                            event.originalOccurrenceKey,
+                      );
+
+                      if (existingExceptionIndex != -1) {
+                        // This occurrence was already edited before.
+                        updatedEvents[existingExceptionIndex] =
+                            updatedEvent;
+                      } else if (sourceIndex != -1) {
+                        final source = updatedEvents[sourceIndex];
+
+                        if (source.repeatType == 'none') {
+                          // A one-time event: update the original.
+                          updatedEvents[sourceIndex] = CalendarEvent(
+                            id: source.id,
+                            title: title,
+                            category: category,
+                            startTime: startTime,
+                            endTime: endTime,
+                            location: locationController.text.trim(),
+                            notes: notesController.text.trim(),
+                          );
+                        } else {
+                          // A recurring event: exclude the original
+                          // occurrence and save its edited replacement.
+                          final occurrenceKey =
+                              event.originalOccurrenceKey ??
+                              _dateKey(event.startTime);
+
+                          if (!source.excludedOccurrenceKeys
+                              .contains(occurrenceKey)) {
+                            updatedEvents[sourceIndex] =
+                                CalendarEvent(
+                              id: source.id,
+                              title: source.title,
+                              category: source.category,
+                              startTime: source.startTime,
+                              endTime: source.endTime,
+                              location: source.location,
+                              notes: source.notes,
+                              repeatType: source.repeatType,
+                              repeatUntil: source.repeatUntil,
+                              excludedOccurrenceKeys: [
+                                ...source.excludedOccurrenceKeys,
+                                occurrenceKey,
+                              ],
+                            );
+                          }
+
+                          updatedEvents.add(
+                            CalendarEvent(
+                              id: DateTime.now()
+                                  .microsecondsSinceEpoch
+                                  .toString(),
+                              title: title,
+                              category: category,
+                              startTime: startTime,
+                              endTime: endTime,
+                              location: locationController.text.trim(),
+                              notes: notesController.text.trim(),
+                              parentEventId: source.id,
+                              originalOccurrenceKey: occurrenceKey,
+                            ),
+                          );
+                        }
+                      } else {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              'Could not find the original event.',
+                            ),
+                          ),
+                        );
+                        return;
+                      }
+
+                      await StorageService.saveCalendarEvents(
+                        updatedEvents,
+                      );
+
+                      if (!mounted) return;
+
+                      setState(() {
+                        events = updatedEvents;
+                        selectedDate = DateTime(
+                          startTime.year,
+                          startTime.month,
+                          startTime.day,
+                        );
+                        focusedDate = selectedDate;
+                      });
+
+                      Navigator.pop(dialogContext);
+
+                      ScaffoldMessenger.of(this.context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Event updated.'),
+                        ),
+                      );
+                    },
+                    child: const Text('Save'),
+                  ),
+                ],
+              );
+            },
+          );
+        },
+      );
+    } finally {
+      titleController.dispose();
+      locationController.dispose();
+      notesController.dispose();
     }
   }
 
@@ -652,7 +1218,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                                             ],
                                           ],
                                         ),
-                                      ),
+                                      ),                            
                                       actions: [
                                         TextButton(
                                           onPressed: () => Navigator.pop(dialogContext),
@@ -667,6 +1233,13 @@ class _CalendarScreenState extends State<CalendarScreen> {
                                             foregroundColor: Colors.red,
                                           ),
                                           child: const Text('Delete'),
+                                        ),
+                                        TextButton(
+                                          onPressed: () {
+                                            Navigator.pop(dialogContext);
+                                            editEvent(event);
+                                          },
+                                          child: const Text('Edit'),
                                         ),
                                       ],
                                     );
