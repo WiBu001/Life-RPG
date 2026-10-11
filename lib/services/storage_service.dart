@@ -8,6 +8,7 @@ import '../models/main_quest.dart';
 import '../models/main_quest_step.dart';
 import '../models/weekly_quest.dart';
 import '../models/daily_quest.dart';
+import '../models/calendar_event.dart';
 
 class StorageService {
   static const String characterKey = 'character';
@@ -199,5 +200,39 @@ class StorageService {
     }
 
     await saveDailyQuests(existingQuests);
+  }
+
+  static const String calendarEventsKey = 'calendarEvents';
+
+  static Future<void> saveCalendarEvents(
+    List<CalendarEvent> events,
+  ) async {
+    final prefs = await SharedPreferences.getInstance();
+
+    final encodedEvents = jsonEncode(
+      events.map((event) => event.toJson()).toList(),
+    );
+
+    await prefs.setString(calendarEventsKey, encodedEvents);
+  }
+
+  static Future<List<CalendarEvent>?> loadCalendarEvents() async {
+    final prefs = await SharedPreferences.getInstance();
+
+    final savedEvents = prefs.getString(calendarEventsKey);
+
+    if (savedEvents == null) {
+      return null;
+    }
+
+    final List<dynamic> decodedEvents = jsonDecode(savedEvents);
+
+    return decodedEvents
+        .map(
+          (event) => CalendarEvent.fromJson(
+            Map<String, dynamic>.from(event),
+          ),
+        )
+        .toList();
   }
 }
