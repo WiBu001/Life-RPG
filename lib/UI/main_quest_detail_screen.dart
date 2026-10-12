@@ -1,9 +1,8 @@
-
 import 'package:flutter/material.dart';
 
+import '../controllers/main_quest_detail_controller.dart';
 import '../models/main_quest.dart';
 import '../models/main_quest_step.dart';
-import '../services/storage_service.dart';
 import 'main_quest_step_detail_screen.dart';
 
 class MainQuestDetailScreen extends StatefulWidget {
@@ -21,89 +20,84 @@ class MainQuestDetailScreen extends StatefulWidget {
 
 class _MainQuestDetailScreenState
     extends State<MainQuestDetailScreen> {
-  List<MainQuestStep> steps = [];
-  bool isLoading = true;
+  late final MainQuestDetailController controller;
 
   @override
   void initState() {
     super.initState();
-    loadSteps();
+
+    controller = MainQuestDetailController(
+      mainQuest: widget.mainQuest,
+    );
+
+    controller.initialize();
   }
 
-  Future<void> loadSteps() async {
-    final savedSteps =
-        await StorageService.loadMainQuestSteps() ?? [];
-
-    if (!mounted) return;
-
-    setState(() {
-      steps = savedSteps
-          .where((step) => step.mainQuestId == widget.mainQuest.id)
-          .toList();
-      isLoading = false;
-    });
+  @override
+  void dispose() {
+    controller.dispose();
+    super.dispose();
   }
 
   Future<void> showCreateStepDialog() async {
     final titleController = TextEditingController();
     final descriptionController = TextEditingController();
 
-    final result = await showDialog<MainQuestStep>(
+    final result = await showDialog<Map<String, String>>(
       context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('Add Main Quest Step'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: titleController,
-                  decoration: const InputDecoration(
-                    labelText: 'Step Title',
-                    hintText: 'e.g. Complete coursework',
-                  ),
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Add Main Quest Step'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: titleController,
+                decoration: const InputDecoration(
+                  labelText: 'Step Title',
                 ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: descriptionController,
-                  maxLines: 3,
-                  decoration: const InputDecoration(
-                    labelText: 'Description (optional)',
-                  ),
+              ),
+              TextField(
+                controller: descriptionController,
+                decoration: const InputDecoration(
+                  labelText: 'Description',
                 ),
-              ],
-            ),
+                maxLines: 3,
+              ),
+            ],
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                final title = titleController.text.trim();
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final title = titleController.text.trim();
 
-                if (title.isEmpty) return;
-
-                Navigator.pop(
-                  context,
-                  MainQuestStep(
-                    id: DateTime.now()
-                        .microsecondsSinceEpoch
-                        .toString(),
-                    mainQuestId: widget.mainQuest.id,
-                    title: title,
-                    description:
-                        descriptionController.text.trim(),
+              if (title.isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Please enter a step title.'),
                   ),
                 );
-              },
-              child: const Text('Create'),
-            ),
-          ],
-        );
-      },
+                return;
+              }
+
+              Navigator.pop(
+                dialogContext,
+                {
+                  'title': title,
+                  'description':
+                      descriptionController.text.trim(),
+                },
+              );
+            },
+            child: const Text('Create'),
+          ),
+        ],
+      ),
     );
 
     titleController.dispose();
@@ -111,93 +105,111 @@ class _MainQuestDetailScreenState
 
     if (result == null) return;
 
-    final allSteps =
-        await StorageService.loadMainQuestSteps() ?? [];
-
-    allSteps.add(result);
-    await StorageService.saveMainQuestSteps(allSteps);
-
-    if (!mounted) return;
-
-    setState(() {
-      steps.add(result);
-    });
+    await controller.createStep(
+      title: result['title']!,
+      description: result['description'] ?? '',
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Main Quest Details'),
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: showCreateStepDialog,
-        icon: const Icon(Icons.add),
-        label: const Text('Add Step'),
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              widget.mainQuest.title,
-              style: Theme.of(context).textTheme.headlineSmall,
-            ),
-            if (widget.mainQuest.description.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              Text(widget.mainQuest.description),
-            ],
-            const SizedBox(height: 24),
-            Text(
-              'MILESTONES',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            const SizedBox(height: 12),
-            Expanded(
-              child: isLoading
-                  ? const Center(
-                      child: CircularProgressIndicator(),
-                    )
-                  : steps.isEmpty
-                      ? const Center(
-                          child: Text(
-                            'No milestones yet.\nAdd your first step!',
-                            textAlign: TextAlign.center,
-                          ),
-                        )
-                      : ListView.builder(
-                          itemCount: steps.length,
-                          itemBuilder: (context, index) {
-                            final step = steps[index];
+    return AnimatedBuilder(
+      animation: controller,
+      builder: (context, _) {
+        final steps = controller.steps;
 
-                            return Card(
-                              child: ListTile(
-                                leading: const Icon(
-                                  Icons.flag_outlined,
-                                ),
-                                title: Text(step.title),
-                                subtitle: step.description.isEmpty
-                                    ? null
-                                    : Text(step.description),
-                                onTap: () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) => MainQuestStepDetailScreen(
-                                        step: step,
-                                      ),
-                                    ),
-                                  );
-                                },
+        return Scaffold(
+          appBar: AppBar(
+            title: const Text('Main Quest Details'),
+          ),
+          floatingActionButton: FloatingActionButton.extended(
+            onPressed: controller.isLoading
+                ? null
+                : showCreateStepDialog,
+            icon: const Icon(Icons.add),
+            label: const Text('Add Step'),
+          ),
+          body: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  widget.mainQuest.title,
+                  style: Theme.of(context).textTheme.headlineSmall,
+                ),
+                if (widget.mainQuest.description.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Text(widget.mainQuest.description),
+                ],
+                const SizedBox(height: 24),
+                const Text(
+                  'MILESTONES',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                if (controller.errorMessage != null)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Text(
+                      controller.errorMessage!,
+                      style: const TextStyle(color: Colors.red),
+                    ),
+                  ),
+                Expanded(
+                  child: controller.isLoading
+                      ? const Center(
+                          child: CircularProgressIndicator(),
+                        )
+                      : steps.isEmpty
+                          ? const Center(
+                              child: Text(
+                                'No steps yet. Add your first milestone!',
                               ),
-                            );
-                          },
-                        ),
+                            )
+                          : ListView.builder(
+                              itemCount: steps.length,
+                              itemBuilder: (context, index) {
+                                final MainQuestStep step =
+                                    steps[index];
+
+                                return Card(
+                                  child: ListTile(
+                                    leading: const Icon(
+                                      Icons.flag_outlined,
+                                    ),
+                                    title: Text(step.title),
+                                    subtitle:
+                                        step.description.isNotEmpty
+                                            ? Text(step.description)
+                                            : null,
+                                    trailing: const Icon(
+                                      Icons.chevron_right,
+                                    ),
+                                    onTap: () {
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (_) =>
+                                              MainQuestStepDetailScreen(
+                                            step: step,
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                );
+                              },
+                            ),
+                ),
+              ],
             ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 }

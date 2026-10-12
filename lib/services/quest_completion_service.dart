@@ -1,4 +1,3 @@
-
 import '../models/character.dart';
 import '../services/storage_service.dart';
 
@@ -55,6 +54,7 @@ class QuestCompletionService {
       await StorageService.saveDailyQuests(dailyQuests);
     }
 
+
     // Award rewards and apply level-ups.
     final character = await StorageService.loadCharacter() ??
         Character(
@@ -63,21 +63,14 @@ class QuestCompletionService {
           role: 'DPS',
         );
 
-    var currency = await StorageService.loadCurrency();
+    final currency = await StorageService.loadCurrency();
 
-    character.exp += expReward;
-    currency += currencyReward;
-
-    while (character.exp >= 100) {
-      character.exp -= 100;
-      character.level++;
-      character.hp += 50;
-      character.atk += 5;
-      character.def += 3;
-    }
+    character.addExp(expReward);
 
     await StorageService.saveCharacter(character);
-    await StorageService.saveCurrency(currency);
+    await StorageService.saveCurrency(
+      currency + currencyReward,
+    );
 
     return true;
   }

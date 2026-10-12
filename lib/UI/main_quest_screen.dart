@@ -1,8 +1,7 @@
-
 import 'package:flutter/material.dart';
 
+import '../controllers/main_quest_controller.dart';
 import '../models/main_quest.dart';
-import '../services/storage_service.dart';
 import 'main_quest_detail_screen.dart';
 
 class MainQuestScreen extends StatefulWidget {
@@ -13,88 +12,80 @@ class MainQuestScreen extends StatefulWidget {
 }
 
 class _MainQuestScreenState extends State<MainQuestScreen> {
-  List<MainQuest> mainQuests = [];
-  bool isLoading = true;
+  late final MainQuestController controller;
 
   @override
   void initState() {
     super.initState();
-    loadMainQuests();
+
+    controller = MainQuestController();
+    controller.initialize();
   }
 
-  Future<void> loadMainQuests() async {
-    final savedQuests = await StorageService.loadMainQuests();
-
-    if (!mounted) return;
-
-    setState(() {
-      mainQuests = savedQuests ?? [];
-      isLoading = false;
-    });
-  }
-
-  Future<void> saveMainQuests() async {
-    await StorageService.saveMainQuests(mainQuests);
+  @override
+  void dispose() {
+    controller.dispose();
+    super.dispose();
   }
 
   Future<void> showCreateQuestDialog() async {
     final titleController = TextEditingController();
     final descriptionController = TextEditingController();
 
-    final result = await showDialog<MainQuest>(
+    final result = await showDialog<Map<String, String>>(
       context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('Create Main Quest'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: titleController,
-                  decoration: const InputDecoration(
-                    labelText: 'Quest Title',
-                    hintText: 'e.g. Graduate from University',
-                  ),
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('New Main Quest'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: titleController,
+                decoration: const InputDecoration(
+                  labelText: 'Quest Title',
                 ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: descriptionController,
-                  maxLines: 3,
-                  decoration: const InputDecoration(
-                    labelText: 'Description (optional)',
-                  ),
+              ),
+              TextField(
+                controller: descriptionController,
+                decoration: const InputDecoration(
+                  labelText: 'Description',
                 ),
-              ],
-            ),
+                maxLines: 3,
+              ),
+            ],
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                final title = titleController.text.trim();
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final title = titleController.text.trim();
 
-                if (title.isEmpty) return;
-
-                Navigator.pop(
-                  context,
-                  MainQuest(
-                    id: DateTime.now().microsecondsSinceEpoch.toString(),
-                    title: title,
-                    description:
-                        descriptionController.text.trim(),
-                    createdAt: DateTime.now(),
+              if (title.isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Please enter a quest title.'),
                   ),
                 );
-              },
-              child: const Text('Create'),
-            ),
-          ],
-        );
-      },
+                return;
+              }
+
+              Navigator.pop(
+                dialogContext,
+                {
+                  'title': title,
+                  'description': descriptionController.text.trim(),
+                },
+              );
+            },
+            child: const Text('Create'),
+          ),
+        ],
+      ),
     );
 
     titleController.dispose();
@@ -102,60 +93,100 @@ class _MainQuestScreenState extends State<MainQuestScreen> {
 
     if (result == null) return;
 
-    setState(() {
-      mainQuests.add(result);
-    });
-
-    await saveMainQuests();
+    await controller.createQuest(
+      title: result['title']!,
+      description: result['description'] ?? '',
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Main Quests'),
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: showCreateQuestDialog,
-        icon: const Icon(Icons.add),
-        label: const Text('New Main Quest'),
-      ),
-      body: isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : mainQuests.isEmpty
-              ? const Center(
-                  child: Text(
-                    'No Main Quests yet.\nCreate your first long-term goal!',
-                    textAlign: TextAlign.center,
-                  ),
-                )
-              : ListView.builder(
-                  padding: const EdgeInsets.all(16),
-                  itemCount: mainQuests.length,
-                  itemBuilder: (context, index) {
-                    final quest = mainQuests[index];
+    return AnimatedBuilder(
+      animation: controller,
+      builder: (context, _) {
+        final mainQuests = controller.mainQuests;
 
-                    return Card(
-                      child: ListTile(
-                        leading: const Icon(Icons.flag),
-                        title: Text(quest.title),
-                        subtitle: quest.description.isEmpty
-                            ? null
-                            : Text(quest.description),
-                            onTap: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => MainQuestDetailScreen(
-                                    mainQuest: quest,
-                                  ),
-                                ),
-                              );
+        return Scaffold(
+          appBar: AppBar(
+            title: const Text('Main Quests'),
+          ),
+          floatingActionButton: FloatingActionButton.extended(
+            onPressed: controller.isLoading
+                ? null
+                : showCreateQuestDialog,
+            icon: const Icon(Icons.add),
+            label: const Text('New Main Quest'),
+          ),
+          body: controller.isLoading
+              ? const Center(
+                  child: CircularProgressIndicator(),
+                )
+              : Column(
+                  children: [
+                    if (controller.errorMessage != null)
+                      MaterialBanner(
+                        content: Text(controller.errorMessage!),
+                        actions: [
+                          TextButton(
+                            onPressed: () {
+                              // The message disappears when a later
+                              // successful operation clears it.
                             },
+                            child: const Text('OK'),
+                          ),
+                        ],
                       ),
-                    );
-                  },
+                    Expanded(
+                      child: mainQuests.isEmpty
+                          ? const Center(
+                              child: Text(
+                                'No Main Quests yet. Create your first goal!',
+                              ),
+                            )
+                          : ListView.builder(
+                              itemCount: mainQuests.length,
+                              itemBuilder: (context, index) {
+                                final MainQuest quest =
+                                    mainQuests[index];
+
+                                return Card(
+                                  margin: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 6,
+                                  ),
+                                  child: ListTile(
+                                    leading: const Icon(
+                                      Icons.flag,
+                                      color: Colors.orange,
+                                    ),
+                                    title: Text(quest.title),
+                                    subtitle:
+                                        quest.description.isNotEmpty
+                                            ? Text(quest.description)
+                                            : null,
+                                    trailing: const Icon(
+                                      Icons.chevron_right,
+                                    ),
+                                    onTap: () {
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (_) =>
+                                              MainQuestDetailScreen(
+                                            mainQuest: quest,
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                );
+                              },
+                            ),
+                    ),
+                  ],
                 ),
+        );
+      },
     );
   }
 }
