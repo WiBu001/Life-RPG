@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import '../models/weekly_quest.dart';
 import '../controllers/weekly_quest_detail_controller.dart';
+import '../models/weekly_quest.dart';
 
 class WeeklyQuestDetailScreen extends StatefulWidget {
   final WeeklyQuest weeklyQuest;
@@ -23,7 +23,6 @@ class _WeeklyQuestDetailScreenState
   @override
   void initState() {
     super.initState();
-
     controller = WeeklyQuestDetailController(
       weeklyQuest: widget.weeklyQuest,
     );
@@ -35,7 +34,7 @@ class _WeeklyQuestDetailScreenState
     super.dispose();
   }
 
-  Future<void> completeTask(int index) async {
+  Future<void> _completeTask(int index) async {
     final wasCompleted = controller.isTaskCompleted(index);
 
     await controller.completeTask(index);
@@ -45,9 +44,7 @@ class _WeeklyQuestDetailScreenState
     if (!wasCompleted && controller.isTaskCompleted(index)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text(
-            'Task completed! +100 EXP, +10 currency',
-          ),
+          content: Text('Task completed! +100 EXP, +10 currency'),
         ),
       );
     }
@@ -61,9 +58,7 @@ class _WeeklyQuestDetailScreenState
         final quest = controller.weeklyQuest;
 
         return Scaffold(
-          appBar: AppBar(
-            title: const Text('Weekly Quest Details'),
-          ),
+          appBar: AppBar(title: const Text('Weekly Quest Details')),
           body: Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
@@ -81,14 +76,10 @@ class _WeeklyQuestDetailScreenState
                 Text(
                   '${controller.completedCount} / '
                   '${quest.dailyTaskTitles.length} tasks completed',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                  ),
+                  style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 8),
-                LinearProgressIndicator(
-                  value: controller.progress,
-                ),
+                LinearProgressIndicator(value: controller.progress),
                 const SizedBox(height: 16),
                 const Text(
                   'TASK CHECKLIST',
@@ -100,9 +91,7 @@ class _WeeklyQuestDetailScreenState
                 const SizedBox(height: 8),
                 Expanded(
                   child: quest.dailyTaskTitles.isEmpty
-                      ? const Center(
-                          child: Text('No tasks added.'),
-                        )
+                      ? const Center(child: Text('No tasks added.'))
                       : ListView.builder(
                           itemCount: quest.dailyTaskTitles.length,
                           itemBuilder: (context, index) {
@@ -114,23 +103,21 @@ class _WeeklyQuestDetailScreenState
                             return Card(
                               child: CheckboxListTile(
                                 value: isCompleted,
-                                onChanged:
-                                    isCompleted || isProcessing
-                                        ? null
-                                        : (value) {
-                                            if (value == true) {
-                                              completeTask(index);
-                                            }
-                                          },
+                                onChanged: isCompleted || isProcessing
+                                    ? null
+                                    : (value) {
+                                        if (value == true) {
+                                          _completeTask(index);
+                                        }
+                                      },
                                 title: Text(
                                   quest.dailyTaskTitles[index],
                                   style: TextStyle(
                                     decoration: isCompleted
                                         ? TextDecoration.lineThrough
                                         : TextDecoration.none,
-                                    color: isCompleted
-                                        ? Colors.grey
-                                        : null,
+                                    color:
+                                        isCompleted ? Colors.grey : null,
                                   ),
                                 ),
                                 secondary: isProcessing

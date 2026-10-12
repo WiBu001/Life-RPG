@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../controllers/main_quest_step_detail_controller.dart';
 import '../models/main_quest_step.dart';
 import '../models/weekly_quest.dart';
+import '../utils/date_formatter.dart';
 import 'weekly_quest_detail_screen.dart';
 
 class MainQuestStepDetailScreen extends StatefulWidget {
@@ -25,11 +26,7 @@ class _MainQuestStepDetailScreenState
   @override
   void initState() {
     super.initState();
-
-    controller = MainQuestStepDetailController(
-      step: widget.step,
-    );
-
+    controller = MainQuestStepDetailController(step: widget.step);
     controller.initialize();
   }
 
@@ -39,15 +36,13 @@ class _MainQuestStepDetailScreenState
     super.dispose();
   }
 
-  Future<void> showCreateWeeklyQuestDialog() async {
+  Future<void> _showCreateWeeklyQuestDialog() async {
     final titleController = TextEditingController();
     final descriptionController = TextEditingController();
     final tasksController = TextEditingController();
 
     DateTime startDate = DateTime.now();
-    DateTime deadline = DateTime.now().add(
-      const Duration(days: 6),
-    );
+    DateTime deadline = DateTime.now().add(const Duration(days: 6));
 
     final result = await showDialog<Map<String, dynamic>>(
       context: context,
@@ -60,15 +55,13 @@ class _MainQuestStepDetailScreenState
               children: [
                 TextField(
                   controller: titleController,
-                  decoration: const InputDecoration(
-                    labelText: 'Quest Title',
-                  ),
+                  decoration:
+                      const InputDecoration(labelText: 'Quest Title'),
                 ),
                 TextField(
                   controller: descriptionController,
-                  decoration: const InputDecoration(
-                    labelText: 'Description',
-                  ),
+                  decoration:
+                      const InputDecoration(labelText: 'Description'),
                   maxLines: 2,
                 ),
                 TextField(
@@ -83,9 +76,7 @@ class _MainQuestStepDetailScreenState
                 ListTile(
                   contentPadding: EdgeInsets.zero,
                   title: const Text('Start Date'),
-                  subtitle: Text(
-                    '${startDate.day}/${startDate.month}/${startDate.year}',
-                  ),
+                  subtitle: Text(DateFormatter.formatShortDate(startDate)),
                   trailing: const Icon(Icons.calendar_today),
                   onTap: () async {
                     final selected = await showDatePicker(
@@ -98,7 +89,6 @@ class _MainQuestStepDetailScreenState
                     if (selected != null) {
                       setDialogState(() {
                         startDate = selected;
-
                         if (deadline.isBefore(startDate)) {
                           deadline = startDate;
                         }
@@ -109,9 +99,7 @@ class _MainQuestStepDetailScreenState
                 ListTile(
                   contentPadding: EdgeInsets.zero,
                   title: const Text('Deadline'),
-                  subtitle: Text(
-                    '${deadline.day}/${deadline.month}/${deadline.year}',
-                  ),
+                  subtitle: Text(DateFormatter.formatShortDate(deadline)),
                   trailing: const Icon(Icons.calendar_today),
                   onTap: () async {
                     final selected = await showDatePicker(
@@ -122,9 +110,7 @@ class _MainQuestStepDetailScreenState
                     );
 
                     if (selected != null) {
-                      setDialogState(() {
-                        deadline = selected;
-                      });
+                      setDialogState(() => deadline = selected);
                     }
                   },
                 ),
@@ -139,11 +125,10 @@ class _MainQuestStepDetailScreenState
             ElevatedButton(
               onPressed: () {
                 final title = titleController.text.trim();
-
                 final tasks = tasksController.text
                     .split('\n')
-                    .map((task) => task.trim())
-                    .where((task) => task.isNotEmpty)
+                    .map((t) => t.trim())
+                    .where((t) => t.isNotEmpty)
                     .toList();
 
                 if (title.isEmpty || tasks.isEmpty) {
@@ -201,10 +186,6 @@ class _MainQuestStepDetailScreenState
     );
   }
 
-  String formatDate(DateTime date) {
-    return '${date.day}/${date.month}/${date.year}';
-  }
-
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
@@ -213,13 +194,11 @@ class _MainQuestStepDetailScreenState
         final quests = controller.weeklyQuests;
 
         return Scaffold(
-          appBar: AppBar(
-            title: const Text('Weekly Quests'),
-          ),
+          appBar: AppBar(title: const Text('Weekly Quests')),
           floatingActionButton: FloatingActionButton.extended(
             onPressed: controller.isLoading
                 ? null
-                : showCreateWeeklyQuestDialog,
+                : _showCreateWeeklyQuestDialog,
             icon: const Icon(Icons.add),
             label: const Text('New Weekly Quest'),
           ),
@@ -247,9 +226,7 @@ class _MainQuestStepDetailScreenState
                   ),
                 Expanded(
                   child: controller.isLoading
-                      ? const Center(
-                          child: CircularProgressIndicator(),
-                        )
+                      ? const Center(child: CircularProgressIndicator())
                       : quests.isEmpty
                           ? const Center(
                               child: Text(
@@ -259,31 +236,27 @@ class _MainQuestStepDetailScreenState
                           : ListView.builder(
                               itemCount: quests.length,
                               itemBuilder: (context, index) {
-                                final WeeklyQuest quest =
-                                    quests[index];
+                                final WeeklyQuest quest = quests[index];
 
                                 return Card(
                                   child: ListTile(
                                     title: Text(quest.title),
                                     subtitle: Text(
-                                      'Deadline: ${formatDate(quest.deadline)}\n'
+                                      'Deadline: ${DateFormatter.formatShortDate(quest.deadline)}\n'
                                       '${quest.dailyTaskTitles.length} daily tasks',
                                     ),
                                     isThreeLine: true,
-                                    trailing: const Icon(
-                                      Icons.chevron_right,
-                                    ),
-                                    onTap: () {
-                                      Navigator.push(
-                                        context,
-                                        MaterialPageRoute(
-                                          builder: (_) =>
-                                              WeeklyQuestDetailScreen(
-                                            weeklyQuest: quest,
-                                          ),
+                                    trailing:
+                                        const Icon(Icons.chevron_right),
+                                    onTap: () => Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) =>
+                                            WeeklyQuestDetailScreen(
+                                          weeklyQuest: quest,
                                         ),
-                                      );
-                                    },
+                                      ),
+                                    ),
                                   ),
                                 );
                               },

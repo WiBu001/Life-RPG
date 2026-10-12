@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 
 import '../controllers/home_controller.dart';
@@ -17,7 +16,6 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-
     controller = HomeController();
     controller.initialize();
   }
@@ -52,9 +50,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ],
           ),
           body: controller.isLoading
-              ? const Center(
-                  child: CircularProgressIndicator(),
-                )
+              ? const Center(child: CircularProgressIndicator())
               : Padding(
                   padding: const EdgeInsets.all(16),
                   child: Column(
@@ -69,7 +65,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             ),
                           ],
                         ),
-                      _buildCharacterCard(),
+                      _CharacterCard(controller: controller),
                       const SizedBox(height: 20),
                       const Align(
                         alignment: Alignment.centerLeft,
@@ -83,7 +79,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                       const SizedBox(height: 10),
                       Expanded(
-                        child: _buildQuestList(),
+                        child: _QuestList(controller: controller),
                       ),
                     ],
                   ),
@@ -92,8 +88,15 @@ class _HomeScreenState extends State<HomeScreen> {
       },
     );
   }
+}
 
-  Widget _buildCharacterCard() {
+class _CharacterCard extends StatelessWidget {
+  final HomeController controller;
+
+  const _CharacterCard({required this.controller});
+
+  @override
+  Widget build(BuildContext context) {
     final character = controller.character;
 
     return Card(
@@ -124,8 +127,15 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
+}
 
-  Widget _buildQuestList() {
+class _QuestList extends StatelessWidget {
+  final HomeController controller;
+
+  const _QuestList({required this.controller});
+
+  @override
+  Widget build(BuildContext context) {
     final quests = controller.quests;
 
     if (quests.isEmpty) {
@@ -140,29 +150,30 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return ListView.builder(
       itemCount: quests.length,
-      itemBuilder: (context, index) {
-        final quest = quests[index];
-
-        return _buildQuestCard(quest);
-      },
+      itemBuilder: (context, index) =>
+          _QuestCard(quest: quests[index], controller: controller),
     );
   }
+}
 
-  Widget _buildQuestCard(DailyQuest quest) {
+class _QuestCard extends StatelessWidget {
+  final DailyQuest quest;
+  final HomeController controller;
+
+  const _QuestCard({required this.quest, required this.controller});
+
+  @override
+  Widget build(BuildContext context) {
     return Card(
       child: ListTile(
         title: Text(quest.title),
         subtitle: Text(
-          '+${quest.expReward} EXP'
-          '    +${quest.currencyReward} 💎',
+          '+${quest.expReward} EXP    +${quest.currencyReward} 💎',
         ),
         trailing: ElevatedButton(
-          onPressed: quest.isCompleted
-              ? null
-              : () => controller.completeQuest(quest),
-          child: Text(
-            quest.isCompleted ? 'COMPLETED' : 'COMPLETE',
-          ),
+          onPressed:
+              quest.isCompleted ? null : () => controller.completeQuest(quest),
+          child: Text(quest.isCompleted ? 'COMPLETED' : 'COMPLETE'),
         ),
       ),
     );

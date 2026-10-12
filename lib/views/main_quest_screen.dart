@@ -17,7 +17,6 @@ class _MainQuestScreenState extends State<MainQuestScreen> {
   @override
   void initState() {
     super.initState();
-
     controller = MainQuestController();
     controller.initialize();
   }
@@ -28,7 +27,7 @@ class _MainQuestScreenState extends State<MainQuestScreen> {
     super.dispose();
   }
 
-  Future<void> showCreateQuestDialog() async {
+  Future<void> _showCreateQuestDialog() async {
     final titleController = TextEditingController();
     final descriptionController = TextEditingController();
 
@@ -42,15 +41,11 @@ class _MainQuestScreenState extends State<MainQuestScreen> {
             children: [
               TextField(
                 controller: titleController,
-                decoration: const InputDecoration(
-                  labelText: 'Quest Title',
-                ),
+                decoration: const InputDecoration(labelText: 'Quest Title'),
               ),
               TextField(
                 controller: descriptionController,
-                decoration: const InputDecoration(
-                  labelText: 'Description',
-                ),
+                decoration: const InputDecoration(labelText: 'Description'),
                 maxLines: 3,
               ),
             ],
@@ -107,20 +102,15 @@ class _MainQuestScreenState extends State<MainQuestScreen> {
         final mainQuests = controller.mainQuests;
 
         return Scaffold(
-          appBar: AppBar(
-            title: const Text('Main Quests'),
-          ),
+          appBar: AppBar(title: const Text('Main Quests')),
           floatingActionButton: FloatingActionButton.extended(
-            onPressed: controller.isLoading
-                ? null
-                : showCreateQuestDialog,
+            onPressed:
+                controller.isLoading ? null : _showCreateQuestDialog,
             icon: const Icon(Icons.add),
             label: const Text('New Main Quest'),
           ),
           body: controller.isLoading
-              ? const Center(
-                  child: CircularProgressIndicator(),
-                )
+              ? const Center(child: CircularProgressIndicator())
               : Column(
                   children: [
                     if (controller.errorMessage != null)
@@ -128,10 +118,7 @@ class _MainQuestScreenState extends State<MainQuestScreen> {
                         content: Text(controller.errorMessage!),
                         actions: [
                           TextButton(
-                            onPressed: () {
-                              // The message disappears when a later
-                              // successful operation clears it.
-                            },
+                            onPressed: () {},
                             child: const Text('OK'),
                           ),
                         ],
@@ -146,8 +133,7 @@ class _MainQuestScreenState extends State<MainQuestScreen> {
                           : ListView.builder(
                               itemCount: mainQuests.length,
                               itemBuilder: (context, index) {
-                                final MainQuest quest =
-                                    mainQuests[index];
+                                final MainQuest quest = mainQuests[index];
 
                                 return Card(
                                   margin: const EdgeInsets.symmetric(
@@ -160,24 +146,20 @@ class _MainQuestScreenState extends State<MainQuestScreen> {
                                       color: Colors.orange,
                                     ),
                                     title: Text(quest.title),
-                                    subtitle:
-                                        quest.description.isNotEmpty
-                                            ? Text(quest.description)
-                                            : null,
-                                    trailing: const Icon(
-                                      Icons.chevron_right,
-                                    ),
-                                    onTap: () {
-                                      Navigator.push(
-                                        context,
-                                        MaterialPageRoute(
-                                          builder: (_) =>
-                                              MainQuestDetailScreen(
-                                            mainQuest: quest,
-                                          ),
+                                    subtitle: quest.description.isNotEmpty
+                                        ? Text(quest.description)
+                                        : null,
+                                    trailing:
+                                        const Icon(Icons.chevron_right),
+                                    onTap: () => Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) =>
+                                            MainQuestDetailScreen(
+                                          mainQuest: quest,
                                         ),
-                                      );
-                                    },
+                                      ),
+                                    ),
                                   ),
                                 );
                               },

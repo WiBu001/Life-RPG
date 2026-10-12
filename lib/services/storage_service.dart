@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/character.dart';
-import '../models/quest.dart';
 import '../models/main_quest.dart';
 import '../models/main_quest_step.dart';
 import '../models/weekly_quest.dart';
@@ -33,34 +32,6 @@ class StorageService {
     final jsonData = jsonDecode(jsonString);
 
     return Character.fromJson(jsonData);
-  }
-
-  static const String questsKey = 'quests';
-
-  static Future<void> saveQuests(List<Quest> quests) async {
-    final prefs = await SharedPreferences.getInstance();
-
-    final jsonList = quests.map((quest) => quest.toJson()).toList();
-
-    await prefs.setString(questsKey, jsonEncode(jsonList));
-  }
-
-  static Future<List<Quest>?> loadQuests() async {
-    final prefs = await SharedPreferences.getInstance();
-
-    final jsonString = prefs.getString(questsKey);
-
-    if (jsonString == null) {
-      return null;
-    }
-
-    final List<dynamic> jsonList = jsonDecode(jsonString);
-
-    return jsonList
-        .map((json) => Quest.fromJson(
-              Map<String, dynamic>.from(json as Map),
-            ))
-        .toList();
   }
 
   static const String currencyKey = 'currency';

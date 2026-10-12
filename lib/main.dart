@@ -1,9 +1,8 @@
-
 import 'package:flutter/material.dart';
 
-import 'UI/home_screen.dart';
-import 'UI/main_quest_screen.dart';
-import 'UI/calendar_screen.dart';
+import 'views/home_screen.dart';
+import 'views/main_quest_screen.dart';
+import 'views/calendar_screen.dart';
 
 void main() {
   runApp(const LifeRPG());
@@ -41,34 +40,33 @@ class _MainNavigationState extends State<MainNavigation> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-    body: selectedIndex == 0
-        ? const HomeScreen()
-        : selectedIndex == 1
-            ? const MainQuestScreen()
-            : const CalendarScreen(),
-
-    bottomNavigationBar: BottomNavigationBar(
-      currentIndex: selectedIndex,
-      onTap: (index) {
-        setState(() {
-          selectedIndex = index;
-        });
-      },
-      items: const [
-        BottomNavigationBarItem(
-          icon: Icon(Icons.home),
-          label: 'Home',
-        ),
-        BottomNavigationBarItem(
-          icon: Icon(Icons.flag),
-          label: 'Quests',
-        ),
-        BottomNavigationBarItem(
-          icon: Icon(Icons.calendar_month),
-          label: 'Calendar',
-        ),
-      ],
-    ),
+      body: selectedIndex == 0
+          ? const HomeScreen()
+          : selectedIndex == 1
+              ? const MainQuestScreen()
+              : const CalendarScreen(),
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: selectedIndex,
+        onTap: (index) {
+          setState(() {
+            selectedIndex = index;
+          });
+        },
+        items: const [
+          BottomNavigationBarItem(
+            icon: Icon(Icons.home),
+            label: 'Home',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.flag),
+            label: 'Quests',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.calendar_month),
+            label: 'Calendar',
+          ),
+        ],
+      ),
     );
   }
 }

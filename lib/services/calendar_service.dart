@@ -129,15 +129,4 @@ class CalendarService {
   static Future<void> saveEvents(List<CalendarEvent> events) async {
     await StorageService.saveCalendarEvents(events);
   }
-
-  static Future<List<CalendarEvent>> addEvent({
-    required List<CalendarEvent> existingEvents,
-    required CalendarEvent event,
-  }) async {
-    final updatedEvents = [...existingEvents, event];
-
-    await saveEvents(updatedEvents);
-
-    return updatedEvents;
-  }
 }

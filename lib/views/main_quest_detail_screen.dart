@@ -18,18 +18,13 @@ class MainQuestDetailScreen extends StatefulWidget {
       _MainQuestDetailScreenState();
 }
 
-class _MainQuestDetailScreenState
-    extends State<MainQuestDetailScreen> {
+class _MainQuestDetailScreenState extends State<MainQuestDetailScreen> {
   late final MainQuestDetailController controller;
 
   @override
   void initState() {
     super.initState();
-
-    controller = MainQuestDetailController(
-      mainQuest: widget.mainQuest,
-    );
-
+    controller = MainQuestDetailController(mainQuest: widget.mainQuest);
     controller.initialize();
   }
 
@@ -39,7 +34,7 @@ class _MainQuestDetailScreenState
     super.dispose();
   }
 
-  Future<void> showCreateStepDialog() async {
+  Future<void> _showCreateStepDialog() async {
     final titleController = TextEditingController();
     final descriptionController = TextEditingController();
 
@@ -53,15 +48,11 @@ class _MainQuestDetailScreenState
             children: [
               TextField(
                 controller: titleController,
-                decoration: const InputDecoration(
-                  labelText: 'Step Title',
-                ),
+                decoration: const InputDecoration(labelText: 'Step Title'),
               ),
               TextField(
                 controller: descriptionController,
-                decoration: const InputDecoration(
-                  labelText: 'Description',
-                ),
+                decoration: const InputDecoration(labelText: 'Description'),
                 maxLines: 3,
               ),
             ],
@@ -89,8 +80,7 @@ class _MainQuestDetailScreenState
                 dialogContext,
                 {
                   'title': title,
-                  'description':
-                      descriptionController.text.trim(),
+                  'description': descriptionController.text.trim(),
                 },
               );
             },
@@ -119,13 +109,10 @@ class _MainQuestDetailScreenState
         final steps = controller.steps;
 
         return Scaffold(
-          appBar: AppBar(
-            title: const Text('Main Quest Details'),
-          ),
+          appBar: AppBar(title: const Text('Main Quest Details')),
           floatingActionButton: FloatingActionButton.extended(
-            onPressed: controller.isLoading
-                ? null
-                : showCreateStepDialog,
+            onPressed:
+                controller.isLoading ? null : _showCreateStepDialog,
             icon: const Icon(Icons.add),
             label: const Text('Add Step'),
           ),
@@ -161,9 +148,7 @@ class _MainQuestDetailScreenState
                   ),
                 Expanded(
                   child: controller.isLoading
-                      ? const Center(
-                          child: CircularProgressIndicator(),
-                        )
+                      ? const Center(child: CircularProgressIndicator())
                       : steps.isEmpty
                           ? const Center(
                               child: Text(
@@ -173,8 +158,7 @@ class _MainQuestDetailScreenState
                           : ListView.builder(
                               itemCount: steps.length,
                               itemBuilder: (context, index) {
-                                final MainQuestStep step =
-                                    steps[index];
+                                final MainQuestStep step = steps[index];
 
                                 return Card(
                                   child: ListTile(
@@ -182,24 +166,20 @@ class _MainQuestDetailScreenState
                                       Icons.flag_outlined,
                                     ),
                                     title: Text(step.title),
-                                    subtitle:
-                                        step.description.isNotEmpty
-                                            ? Text(step.description)
-                                            : null,
-                                    trailing: const Icon(
-                                      Icons.chevron_right,
-                                    ),
-                                    onTap: () {
-                                      Navigator.push(
-                                        context,
-                                        MaterialPageRoute(
-                                          builder: (_) =>
-                                              MainQuestStepDetailScreen(
-                                            step: step,
-                                          ),
+                                    subtitle: step.description.isNotEmpty
+                                        ? Text(step.description)
+                                        : null,
+                                    trailing:
+                                        const Icon(Icons.chevron_right),
+                                    onTap: () => Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) =>
+                                            MainQuestStepDetailScreen(
+                                          step: step,
                                         ),
-                                      );
-                                    },
+                                      ),
+                                    ),
                                   ),
                                 );
                               },
